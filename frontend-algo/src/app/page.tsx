@@ -8,50 +8,138 @@ interface Substitution {
   details: string;
 }
 
-interface ApiResponse {
-  brand: string;
+interface SingleMpnResult {
   mpn: string;
   series: string;
   substitutions: Substitution[];
 }
 
+interface BatchApiResponse {
+  brand: string;
+  total: number;
+  results: SingleMpnResult[];
+}
+
 export default function Home() {
   const [brand, setBrand] = useState("yageo");
-  const [mpn, setMpn] = useState("");
-  const [results, setResults] = useState<Substitution[]>([]);
-  const [series, setSeries] = useState<string>("");
+  const [mpnInput, setMpnInput] = useState("");
+  const [batchResults, setBatchResults] = useState<SingleMpnResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
+  const [openAccordions, setOpenAccordions] = useState<Set<number>>(new Set());
 
   const handleSearch = async () => {
-    if (!mpn.trim()) return;
+    const trimmedInput = mpnInput.trim();
+    if (!trimmedInput) return;
+
+    // Split by newlines and clean up
+    const mpns = trimmedInput
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    if (mpns.length === 0) return;
 
     setLoading(true);
     setError("");
+    setBatchResults([]);
+
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/api/generate?brand=${brand}&mpn=${mpn}`
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/generate/batch`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            brand: brand,
+            mpns: mpns,
+          }),
+        }
       );
-      const data: ApiResponse = await response.json();
+
+      const data: BatchApiResponse = await response.json();
       console.log("API Response:", data);
-      
-      if (data.series === "UNKNOWN") {
-        setError("Unknown part series. Please check the MPN.");
-        setResults([]);
-        setSeries("");
+
+      if (data.results && data.results.length > 0) {
+        setBatchResults(data.results);
+        // Auto-open first accordion if multiple results
+        if (data.results.length > 1) {
+          setOpenAccordions(new Set([0]));
+        }
       } else {
-        setResults(data.substitutions || []);
-        setSeries(data.series);
+        setError("No results found. Please check the MPNs.");
       }
     } catch (error) {
       console.error("Error fetching data:", error);
-      setError("Failed to connect to the API. Make sure the backend is running.");
-      setResults([]);
-      setSeries("");
+      setError(
+        "Failed to connect to the API. Make sure the backend is running."
+      );
     } finally {
       setLoading(false);
     }
   };
+
+  const toggleAccordion = (index: number) => {
+    setOpenAccordions((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
+    });
+  };
+
+  const renderSubstitutionTable = (substitutions: Substitution[]) => (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="bg-zinc-100 dark:bg-zinc-700">
+            <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-900 dark:text-zinc-100 border-b border-zinc-300 dark:border-zinc-600">
+              Part Number
+            </th>
+            <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-900 dark:text-zinc-100 border-b border-zinc-300 dark:border-zinc-600">
+              Type
+            </th>
+            <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-900 dark:text-zinc-100 border-b border-zinc-300 dark:border-zinc-600">
+              Details
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {substitutions.map((row, index) => (
+            <tr
+              key={index}
+              className="border-b border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700/50"
+            >
+              <td className="px-4 py-3 text-sm font-mono text-zinc-900 dark:text-zinc-100">
+                {row.part_number}
+              </td>
+              <td className="px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100">
+                <span
+                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    row.type === "Original"
+                      ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                      : row.type === "Packaging Substitute"
+                      ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                      : "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
+                  }`}
+                >
+                  {row.type}
+                </span>
+              </td>
+              <td className="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-400">
+                {row.details}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-zinc-50 font-sans dark:bg-zinc-900 py-12 px-4">
@@ -79,23 +167,22 @@ export default function Home() {
             {/* MPN Input */}
             <div>
               <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                Enter MPN
+                Enter MPN(s) - One per line
               </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={mpn}
-                  onChange={(e) => setMpn(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && handleSearch()}
-                  placeholder="e.g., RC0603FR-0710KL"
-                  className="flex-1 px-4 py-2 border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              <div className="space-y-2">
+                <textarea
+                  value={mpnInput}
+                  onChange={(e) => setMpnInput(e.target.value)}
+                  placeholder="e.g., RC0603FR-0710KL&#10;CC0603KRX5R7BB475&#10;RT0603DRD07127RL"
+                  rows={5}
+                  className="w-full px-4 py-2 border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
                 />
                 <button
                   onClick={handleSearch}
                   disabled={loading}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-zinc-400 transition-colors font-medium"
+                  className="w-full px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-zinc-400 transition-colors font-medium"
                 >
-                  {loading ? "Searching..." : "Search"}
+                  {loading ? "Processing..." : "Generate Substitutions"}
                 </button>
               </div>
             </div>
@@ -103,68 +190,86 @@ export default function Home() {
             {/* Error Message */}
             {error && (
               <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-              </div>
-            )}
-
-            {/* Series Info */}
-            {series && (
-              <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <p className="text-sm text-blue-900 dark:text-blue-100">
-                  <span className="font-semibold">Detected Series:</span> {series}
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {error}
                 </p>
               </div>
             )}
 
-            {/* Results Table */}
-            {results.length > 0 && (
+            {/* Results */}
+            {batchResults.length > 0 && (
               <div className="mt-8">
                 <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50 mb-4">
-                  Substitutions ({results.length})
+                  Results ({batchResults.length} MPN
+                  {batchResults.length > 1 ? "s" : ""})
                 </h2>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="bg-zinc-100 dark:bg-zinc-700">
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-900 dark:text-zinc-100 border-b border-zinc-300 dark:border-zinc-600">
-                          Part Number
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-900 dark:text-zinc-100 border-b border-zinc-300 dark:border-zinc-600">
-                          Type
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-900 dark:text-zinc-100 border-b border-zinc-300 dark:border-zinc-600">
-                          Details
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {results.map((row, index) => (
-                        <tr
-                          key={index}
-                          className="border-b border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700/50"
+
+                {batchResults.length === 1 ? (
+                  // Single result - show table directly
+                  <div className="space-y-4">
+                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <p className="text-sm text-blue-900 dark:text-blue-100">
+                        <span className="font-semibold">MPN:</span>{" "}
+                        {batchResults[0].mpn}
+                        <span className="ml-4 font-semibold">Series:</span>{" "}
+                        {batchResults[0].series}
+                        <span className="ml-4 font-semibold">
+                          Substitutions:
+                        </span>{" "}
+                        {batchResults[0].substitutions.length}
+                      </p>
+                    </div>
+                    {renderSubstitutionTable(batchResults[0].substitutions)}
+                  </div>
+                ) : (
+                  // Multiple results - show accordions
+                  <div className="space-y-3">
+                    {batchResults.map((result, index) => (
+                      <div
+                        key={index}
+                        className="border border-zinc-300 dark:border-zinc-600 rounded-lg overflow-hidden"
+                      >
+                        <button
+                          onClick={() => toggleAccordion(index)}
+                          className="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-600 transition-colors flex items-center justify-between text-sm"
                         >
-                          <td className="px-4 py-3 text-sm font-mono text-zinc-900 dark:text-zinc-100">
-                            {row.part_number}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              row.type === "Original" 
-                                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                                : row.type === "Packaging Substitute"
-                                ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
-                                : "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
-                            }`}>
-                              {row.type}
+                          <div className="flex items-center gap-3 text-left">
+                            <span className="font-mono font-medium text-zinc-900 dark:text-zinc-100">
+                              {result.mpn}
                             </span>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-400">
-                            {row.details}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                              Series: {result.series}
+                            </span>
+                            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                              {result.substitutions.length} substitution
+                              {result.substitutions.length > 1 ? "s" : ""}
+                            </span>
+                          </div>
+                          <svg
+                            className={`w-4 h-4 text-zinc-500 dark:text-zinc-400 transition-transform flex-shrink-0 ${
+                              openAccordions.has(index) ? "rotate-180" : ""
+                            }`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 9l-7 7-7-7"
+                            />
+                          </svg>
+                        </button>
+                        {openAccordions.has(index) && (
+                          <div className="p-4 bg-white dark:bg-zinc-800">
+                            {renderSubstitutionTable(result.substitutions)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
