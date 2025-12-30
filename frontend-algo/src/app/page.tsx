@@ -93,6 +93,64 @@ export default function Home() {
     });
   };
 
+  const handleExportToExcel = async () => {
+    const trimmedInput = mpnInput.trim();
+    if (!trimmedInput) {
+      setError("Please enter at least one MPN to export.");
+      return;
+    }
+
+    // Split by newlines and clean up
+    const mpns = trimmedInput
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    if (mpns.length === 0) {
+      setError("Please enter at least one MPN to export.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/generate/batch/export`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            brand: brand,
+            mpns: mpns,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to generate Excel file");
+      }
+
+      // Get the blob and download it
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `yageo_substitutions_${new Date().getTime()}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error exporting to Excel:", error);
+      setError("Failed to export to Excel. Make sure the backend is running.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const renderSubstitutionTable = (substitutions: Substitution[]) => (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse">
@@ -177,13 +235,35 @@ export default function Home() {
                   rows={5}
                   className="w-full px-4 py-2 border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
                 />
-                <button
-                  onClick={handleSearch}
-                  disabled={loading}
-                  className="w-full px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-zinc-400 transition-colors font-medium"
-                >
-                  {loading ? "Processing..." : "Generate Substitutions"}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSearch}
+                    disabled={loading}
+                    className="flex-1 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-zinc-400 transition-colors font-medium"
+                  >
+                    {loading ? "Processing..." : "Generate Substitutions"}
+                  </button>
+                  <button
+                    onClick={handleExportToExcel}
+                    disabled={loading}
+                    className="flex-1 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-zinc-400 transition-colors font-medium flex items-center justify-center gap-2"
+                  >
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                      />
+                    </svg>
+                    {loading ? "Exporting..." : "Export to Excel"}
+                  </button>
+                </div>
               </div>
             </div>
 
