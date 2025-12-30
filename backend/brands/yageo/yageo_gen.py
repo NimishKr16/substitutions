@@ -26,6 +26,47 @@ SERIES_RULES = {
         }
     },
 
+    "9C": {
+        "family": "resistor",
+        "packaging_letters": {
+            "R": "Paper tape",
+            "K": "Plastic (embossed) tape"
+        },
+        "reel_codes": {
+            "07": '7" reel',
+            "13": '13" reel'
+        },
+        "cross_series": {}
+    },
+
+    "AT": {
+        "family": "resistor",
+        "packaging_letters": {
+            "R": "Paper tape",
+            "K": "Plastic (embossed) tape"
+        },
+        "reel_codes": {
+            "07": '7" reel',
+            "10": '10" reel',
+            "13": '13" reel'
+        },
+        "cross_series": {}
+    },
+
+    "AF": {
+        "family": "resistor",
+        "packaging_letters": {
+            "R": "Paper tape",
+            "K": "Plastic (embossed) tape"
+        },
+        "reel_codes": {
+            "07": '7" reel',
+            "10": '10" reel',
+            "13": '13" reel'
+        },
+        "cross_series": {}
+    },
+
     "RT": {
         "family": "resistor",
         "packaging_letters": {
@@ -195,7 +236,64 @@ def resistor_substitutions(part_number: str, series: str) -> List[Dict]:
     rules = SERIES_RULES[series]
     output = []
 
-    match = re.match(r"([A-Z]{2})(\d{4})([A-Z])([A-Z])-(\d{2})(.*)", part_number)
+    # Special handling for Yageo 9C automotive resistors (no dash format)
+    if series == "9C":
+        match_9c = re.match(r"(9C)(\d{4})([A-Z0-9]+)", part_number)
+        if not match_9c:
+            return []
+
+        prefix, size, rest = match_9c.groups()
+
+        for p_code, p_desc in rules["packaging_letters"].items():
+            for r_code, r_desc in rules["reel_codes"].items():
+                new_pn = f"{prefix}{size}{rest}"
+                output.append({
+                    "part_number": new_pn,
+                    "type": "Packaging Substitute",
+                    "details": f"{p_desc}, {r_desc}"
+                })
+
+        return output
+
+    # Special handling for Yageo AT thin-film resistors (no dash format)
+    if series == "AT" and "-" not in part_number:
+        match_at = re.match(r"(AT)(\d{4})([A-Z0-9]+)", part_number)
+        if not match_at:
+            return []
+
+        prefix, size, rest = match_at.groups()
+
+        for p_code, p_desc in rules["packaging_letters"].items():
+            for r_code, r_desc in rules["reel_codes"].items():
+                new_pn = f"{prefix}{size}{rest}"
+                output.append({
+                    "part_number": new_pn,
+                    "type": "Packaging Substitute",
+                    "details": f"{p_desc}, {r_desc}"
+                })
+
+        return output
+
+    # Special handling for Yageo AF anti-sulfur resistors (no dash format)
+    if series == "AF" and "-" not in part_number:
+        match_af = re.match(r"(AF)(\d{4})([A-Z0-9]+)", part_number)
+        if not match_af:
+            return []
+
+        prefix, size, rest = match_af.groups()
+
+        for p_code, p_desc in rules["packaging_letters"].items():
+            for r_code, r_desc in rules["reel_codes"].items():
+                new_pn = f"{prefix}{size}{rest}"
+                output.append({
+                    "part_number": new_pn,
+                    "type": "Packaging Substitute",
+                    "details": f"{p_desc}, {r_desc}"
+                })
+
+        return output
+
+    match = re.match(r"([A-Z0-9]{2})(\d{4})([A-Z])([A-Z])-(\d{2})(.*)", part_number)
     if not match:
         return []
 
@@ -325,3 +423,27 @@ def mov_substitutions(part_number: str) -> List[Dict]:
 
 
 
+#  test_pn = [
+#         "RC0805FR-07205KL",
+#         "RC0603FR-0757K6L",
+#         "RC1206FR-074R99L",
+#         "RC0603FR-0722KL",
+#         "RC1206FR-07332KL",
+#         "CC0603KRX5R7BB475",
+#         "RC0402FR-0710RL",
+#         "RC0402FR-0715KL",
+#         "RC0402FR-0747KL",
+#         "AC0402FR-0751RL",
+#         "CC0402KRX5R7BB105",
+#         "RC0402FR-071K2P",
+#         "CC0402KRX7R7BB224",
+#         "RT0603DRD07127RL",
+#         "RC0603FR-0710KL",
+#         "AC0201FR-0710KL",
+#         "CC0201JRNPO9BN120",
+#         "RC0201FR-07100RL",
+#         "RC0402FR-07330KL",
+#         "CC0402KRX7R7BB224"
+
+
+#     ]
